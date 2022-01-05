@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -11,6 +12,7 @@ spec:
     metadata:
       labels:
         app: position-simulator
+        version: latest
     spec:
       containers:
       - name: position-simulator
@@ -20,6 +22,15 @@ spec:
           value: production-microservice
         command: ["java","-Xmx50m","-jar","webapp.jar"]
         imagePullPolicy: Always
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: position-tracker-configmap
+data:
+  application.properties: |-
+    telemetry-url=http://fleetman-vehicle-telemetry:8080
+    staff-service-url=fleetman-staff-service:8080
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -34,15 +45,43 @@ spec:
     metadata:
       labels:
         app: position-tracker
+        version: latest
     spec:
+      volumes:
+      - name: app-config
+        configMap:
+          name: position-tracker-configmap
+          items:
+            - key: application.properties
+              path: application.properties
       containers:
       - name: position-tracker
         image: richardchesterwood/istio-fleetman-position-tracker:6
         env:
         - name: SPRING_PROFILES_ACTIVE
           value: production-microservice
-        command: ["java","-Xmx50m","-jar","webapp.jar"]
+#        command: ["java","-Xmx50m","-jar","webapp.jar"]
+        command: ["java","-Xmx500m","-jar","-Dspring.config.location=file:/deployments/config/application.properties", "webapp.jar"]
         imagePullPolicy: Always
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+      - name: multitool
+        image: praqma/network-multitool
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: api-gateway-configmap
+data:
+  application.properties: |-
+    position-tracker-url=fleetman-position-tracker:8080
+    staff-service-url=fleetman-staff-service:8080
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -57,15 +96,30 @@ spec:
     metadata:
       labels:
         app: api-gateway
+        version: v2
     spec:
+      volumes:
+      - name: app-config
+        configMap:
+          name: api-gateway-configmap
+          items:
+            - key: application.properties
+              path: application.properties
       containers:
       - name: api-gateway
         image: richardchesterwood/istio-fleetman-api-gateway:6
-        env:
-        - name: SPRING_PROFILES_ACTIVE
-          value: production-microservice
-        command: ["java","-Xmx50m","-jar","webapp.jar"]
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+        command: ["java","-Xmx50m","-jar","-Dspring.config.location=file:/deployments/config/application.properties", "webapp.jar"]
         imagePullPolicy: Always
+      - name: multitool
+        image: praqma/network-multitool
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -80,6 +134,7 @@ spec:
     metadata:
       labels:
         app: webapp
+        version: latest
     spec:
       containers:
       - name: webapp
@@ -102,6 +157,7 @@ spec:
     metadata:
       labels:
         app: vehicle-telemetry
+        version: latest
     spec:
       containers:
       - name: vehicle-telemtry
@@ -110,6 +166,15 @@ spec:
         - name: SPRING_PROFILES_ACTIVE
           value: production-microservice
         imagePullPolicy: Always
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: staff-service-configmap
+data:
+  application.properties: |-
+    server.port = 8080
+    logging.level.com.virtualpairprogrammers.staffmanagement.services=ERROR
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -124,16 +189,32 @@ spec:
     metadata:
       labels:
         app: staff-service
+        version: latest
     spec:
+      volumes:
+      - name: app-config
+        configMap:
+          name: staff-service-configmap
+          items:
+            - key: application.properties
+              path: application.properties      
       containers:
       - name: staff-service
         image: richardchesterwood/istio-fleetman-staff-service:6
-        env:
-        - name: SPRING_PROFILES_ACTIVE
-          value: production-microservice
+        command: ["java","-jar","-Dspring.config.location=file:/deployments/config/application.properties", "webapp.jar"]
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
+      - name: multitool
+        image: praqma/network-multitool
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
 ---
 apiVersion: v1
 kind: Service
