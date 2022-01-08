@@ -5,17 +5,17 @@ metadata:
   namespace: default
 spec:
   hosts:
-    - fleetman-staff-service.default.svc.cluster.local  # The Service DNS (ie the regular K8S Service) name that we're applying routing rules to.
+    - fleetman-staff-service  # The Service DNS (ie the regular K8S Service) name that we're applying routing rules to.
   http:
     - route:
         - destination:
             host: fleetman-staff-service.default.svc.cluster.local # The Target DNS name
             subset: safe-group  # The name defined in the DestinationRule
-          weight: 90
+          weight: 85
         - destination:
-            host: fleetman-staff-service.default.svc.cluster.local # The Target DNS name
+            host: fleetman-staff-service # The Target DNS name
             subset: risky-group  # The name defined in the DestinationRule
-          weight: 10
+          weight: 15
 ---
 kind: DestinationRule       # Defining which pods should be part of each subset
 apiVersion: networking.istio.io/v1alpha3

@@ -1,0 +1,5 @@
+GET http://172.22.252.238:30080/vehicle/Huddersfield%20Truck%20B
+GET http://172.22.252.238:31679/vehicle/City%20Truck
+GET http://172.22.252.102:31679/vehicle/City%20Truck
+GET http://172.22.252.238:31679/api/vehicles/driver/London Riverside
+GET http://172.22.252.102:31679/api/vehicles/driver/London Riverside

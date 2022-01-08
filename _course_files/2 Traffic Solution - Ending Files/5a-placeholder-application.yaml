@@ -1,0 +1,325 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: position-simulator
+spec:
+  selector:
+    matchLabels:
+      app: position-simulator
+  replicas: 1
+  template: # template for the pods
+    metadata:
+      labels:
+        app: position-simulator
+        version: latest
+    spec:
+      containers:
+      - name: position-simulator
+        image: richardchesterwood/istio-fleetman-position-simulator:6
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: production-microservice
+        command: ["java","-Xmx50m","-jar","webapp.jar"]
+        imagePullPolicy: Always
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: position-tracker-configmap
+data:
+  application.properties: |-
+    telemetry-url=http://fleetman-vehicle-telemetry:8080
+    staff-service-url=fleetman-staff-service:8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: position-tracker
+spec:
+  selector:
+    matchLabels:
+      app: position-tracker
+  replicas: 1
+  template: # template for the pods
+    metadata:
+      labels:
+        app: position-tracker
+        version: latest
+    spec:
+      volumes:
+      - name: app-config
+        configMap:
+          name: position-tracker-configmap
+          items:
+            - key: application.properties
+              path: application.properties
+      containers:
+      - name: position-tracker
+        image: richardchesterwood/istio-fleetman-position-tracker:6
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: production-microservice
+#        command: ["java","-Xmx50m","-jar","webapp.jar"]
+        command: ["java","-Xmx500m","-jar","-Dspring.config.location=file:/deployments/config/application.properties", "webapp.jar"]
+        imagePullPolicy: Always
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+      - name: multitool
+        image: praqma/network-multitool
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: api-gateway-configmap
+data:
+  application.properties: |-
+    position-tracker-url=fleetman-position-tracker:8080
+    staff-service-url=fleetman-staff-service:8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  replicas: 1
+  template: # template for the pods
+    metadata:
+      labels:
+        app: api-gateway
+        version: v2
+    spec:
+      volumes:
+      - name: app-config
+        configMap:
+          name: api-gateway-configmap
+          items:
+            - key: application.properties
+              path: application.properties
+      containers:
+      - name: api-gateway
+        image: richardchesterwood/istio-fleetman-api-gateway:6
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+        command: ["java","-Xmx50m","-jar","-Dspring.config.location=file:/deployments/config/application.properties", "webapp.jar"]
+        imagePullPolicy: Always
+      - name: multitool
+        image: praqma/network-multitool
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+spec:
+  selector:
+    matchLabels:
+      app: webapp
+  replicas: 1
+  template: # template for the pods
+    metadata:
+      labels:
+        app: webapp
+        version: latest
+    spec:
+      containers:
+      - name: webapp
+        image: richardchesterwood/istio-fleetman-webapp-angular:6
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: production-microservice
+        imagePullPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vehicle-telemetry
+spec:
+  selector:
+    matchLabels:
+      app: vehicle-telemetry
+  replicas: 1
+  template: # template for the pods
+    metadata:
+      labels:
+        app: vehicle-telemetry
+        version: latest
+    spec:
+      containers:
+      - name: vehicle-telemtry
+        image: richardchesterwood/istio-fleetman-vehicle-telemetry:6
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: production-microservice
+        imagePullPolicy: Always
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: staff-service-configmap
+data:
+  application.properties: |-
+    server.port = 8080
+    logging.level.com.virtualpairprogrammers.staffmanagement.services=ERROR
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staff-service
+spec:
+  selector:
+    matchLabels:
+      app: staff-service
+  replicas: 2
+  template: # template for the pods
+    metadata:
+      labels:
+        app: staff-service
+        version: safe
+    spec:
+      volumes:
+      - name: app-config
+        configMap:
+          name: staff-service-configmap
+          items:
+            - key: application.properties
+              path: application.properties      
+      containers:
+      - name: staff-service
+        image: richardchesterwood/istio-fleetman-staff-service:6-placeholder
+        command: ["java","-jar","-Dspring.config.location=file:/deployments/config/application.properties", "webapp.jar"]
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+      - name: multitool
+        image: praqma/network-multitool
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: staff-service-risky-version
+spec:
+  selector:
+    matchLabels:
+      app: staff-service
+  replicas: 1
+  template: # template for the pods
+    metadata:
+      labels:
+        app: staff-service
+        version: risky
+    spec:
+      volumes:
+      - name: app-config
+        configMap:
+          name: staff-service-configmap
+          items:
+            - key: application.properties
+              path: application.properties      
+      containers:
+      - name: staff-service
+        image: richardchesterwood/istio-fleetman-staff-service:6
+        command: ["java","-jar","-Dspring.config.location=file:/deployments/config/application.properties", "webapp.jar"]
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+      - name: multitool
+        image: praqma/network-multitool
+        volumeMounts:
+          - name: app-config
+            mountPath: /deployments/config
+            readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleetman-webapp
+spec:
+  # This defines which pods are going to be represented by this Service
+  # The service becomes a network endpoint for either other services
+  # or maybe external users to connect to (eg browser)
+  selector:
+    app: webapp
+  ports:
+    - name: http
+      port: 80
+      nodePort: 30080
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleetman-position-tracker
+
+spec:
+  # This defines which pods are going to be represented by this Service
+  # The service becomes a network endpoint for either other services
+  # or maybe external users to connect to (eg browser)
+  selector:
+    app: position-tracker
+  ports:
+    - name: http
+      port: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleetman-api-gateway
+spec:
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      port: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleetman-vehicle-telemetry
+spec:
+  selector:
+    app: vehicle-telemetry
+  ports:
+    - name: http
+      port: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleetman-staff-service
+spec:
+  selector:
+    app: staff-service
+  ports:
+    - name: http
+      port: 8080
+  type: ClusterIP
